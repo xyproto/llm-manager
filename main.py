@@ -47,25 +47,12 @@ def parse_arguments() -> argparse.Namespace:
     treat it as 'get <task>'.
     """
     parser = argparse.ArgumentParser(
-        description=(
-            "Manage LLM model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf."
-        ),
+        description="Manage LLM model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf.",
+        epilog="Shortcut:\n  llm-manager <task>    Equivalent to 'llm-manager get <task>'",
         formatter_class=argparse.RawTextHelpFormatter,
-        usage=(
-            "llm-manager <command> [<args>]\n\n"
-            "Commands:\n"
-            "  set <task> <model>   Set or update the model for a specific task\n"
-            "  get <task>           Get the model for a specific task\n"
-            "  show                 Show all task-to-model mappings\n\n"
-            "Options:\n"
-            "  -h, --help           Show this help message and exit\n"
-            "  -v, --version        Show the version of this utility and exit\n\n"
-            "Shortcut:\n"
-            "  llm-manager <task>    Equivalent to 'llm-manager get <task>'\n"
-        ),
     )
 
-    subparsers = parser.add_subparsers(dest="subcommand", title="Commands", metavar="")
+    subparsers = parser.add_subparsers(dest="subcommand", title="Commands")
 
     parser_set = subparsers.add_parser(
         "set", help="Set or update the model for a specific task"
@@ -78,7 +65,7 @@ def parse_arguments() -> argparse.Namespace:
     parser_get = subparsers.add_parser("get", help="Get the model for a specific task")
     parser_get.add_argument("task", type=str, help="Type of the task to retrieve")
 
-    subparsers.add_parser("show", help="Show all task-to-model mappings")
+    parser_show = subparsers.add_parser("show", help="Show all task-to-model mappings")
 
     parser.add_argument(
         "--version",
