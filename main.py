@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 CONFIG_FILE = Path("/etc/llm.conf")
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 # Define comment markers
 SINGLE_LINE_COMMENTS = ["#", "//", "--"]

@@ -87,6 +87,6 @@ translation=mixtral:8x7b
 
 ## General info
 
-* Version: 1.0.1
+* Version: 1.0.2
 * License: GPL2
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
