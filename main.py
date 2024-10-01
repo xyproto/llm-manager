@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# lm-manager
-# Utility for managing LLM model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf.
-#
-# SPDX-License-Identifier: GPL-2.0-or-later
+# Utility for managing LLM task->model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf.
 #
 
 import argparse
@@ -16,7 +13,7 @@ from typing import Dict, List
 
 VERSION = "1.1.0"
 
-# Configuration file paths
+
 def get_user_config_file() -> Path:
     """
     Get the path to the user's configuration file, handling cases where the script is run with sudo.
@@ -27,20 +24,21 @@ def get_user_config_file() -> Path:
             user_info = pwd.getpwnam(sudo_user)
             home_dir = user_info.pw_dir
         except KeyError:
-            print(f"Error: Cannot find home directory for sudo user '{sudo_user}'.", file=sys.stderr)
+            print(
+                f"Error: Cannot find home directory for sudo user '{sudo_user}'.",
+                file=sys.stderr,
+            )
             sys.exit(1)
     else:
         home_dir = os.environ.get("HOME", str(Path.home()))
     return Path(home_dir) / ".config" / "llm-manager" / "llm.conf"
 
+
 USER_CONFIG_FILE = get_user_config_file()
 SYSTEM_CONFIG_FILE = Path("/etc/llm.conf")
 
-# Define comment markers
 COMMENT_MARKERS = ("#", "//")
 
-# Define the assignment operator
-ASSIGNMENT_OPERATOR = "="
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -54,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
         ),
         formatter_class=argparse.RawTextHelpFormatter,
         usage=(
-            "lm-manager <command> [<args>]\n\n"
+            "llm-manager <command> [<args>]\n\n"
             "Commands:\n"
             "  set <task> <model>   Set or update the model for a specific task\n"
             "  get <task>           Get the model for a specific task\n"
@@ -63,13 +61,12 @@ def parse_arguments() -> argparse.Namespace:
             "  -h, --help           Show this help message and exit\n"
             "  -v, --version        Show the version of this utility and exit\n\n"
             "Shortcut:\n"
-            "  lm-manager <task>    Equivalent to 'lm-manager get <task>'\n"
+            "  llm-manager <task>    Equivalent to 'llm-manager get <task>'\n"
         ),
     )
 
     subparsers = parser.add_subparsers(dest="subcommand", title="Commands", metavar="")
 
-    # Set command
     parser_set = subparsers.add_parser(
         "set", help="Set or update the model for a specific task"
     )
@@ -78,23 +75,19 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser_set.add_argument("model", type=str, help="Model value (e.g., gemma2:2b)")
 
-    # Get command
     parser_get = subparsers.add_parser("get", help="Get the model for a specific task")
     parser_get.add_argument("task", type=str, help="Type of the task to retrieve")
 
-    # Show command
     subparsers.add_parser("show", help="Show all task-to-model mappings")
 
-    # Version flag
     parser.add_argument(
         "--version",
         "-v",
         action="version",
-        version=f"lm-manager version {VERSION}",
+        version=f"llm-manager version {VERSION}",
         help="Show the version of this utility and exit",
     )
 
-    # If no arguments are provided, show help and exit
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
@@ -108,6 +101,7 @@ def parse_arguments() -> argparse.Namespace:
 
     return args
 
+
 def read_config_file(config_file: Path) -> List[str]:
     """
     Read the given configuration file and return a list of its lines.
@@ -118,13 +112,17 @@ def read_config_file(config_file: Path) -> List[str]:
             with config_file.open("r", encoding="utf-8") as f:
                 return f.readlines()
         except PermissionError:
-            print(f"Warning: Permission denied while reading {config_file}.", file=sys.stderr)
+            print(
+                f"Warning: Permission denied while reading {config_file}.",
+                file=sys.stderr,
+            )
             return []
         except Exception as e:
             print(f"Warning: Error reading {config_file}: {e}", file=sys.stderr)
             return []
     else:
         return []
+
 
 def write_config_file(config_file: Path, lines: List[str]) -> None:
     """
@@ -140,11 +138,14 @@ def write_config_file(config_file: Path, lines: List[str]) -> None:
         # Set file permissions to read/write for the user only
         os.chmod(config_file, 0o600)
     except PermissionError:
-        print(f"Error: Permission denied while writing to {config_file}.", file=sys.stderr)
+        print(
+            f"Error: Permission denied while writing to {config_file}.", file=sys.stderr
+        )
         sys.exit(1)
     except Exception as e:
         print(f"Error: Error writing to {config_file}: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 def parse_config(lines: List[str]) -> Dict[str, str]:
     """
@@ -162,32 +163,35 @@ def parse_config(lines: List[str]) -> Dict[str, str]:
         if stripped.startswith(COMMENT_MARKERS):
             continue
 
-        # Split line by the assignment operator
-        if ASSIGNMENT_OPERATOR in stripped:
-            key, value = stripped.split(ASSIGNMENT_OPERATOR, 1)
+        if "=" in stripped:
+            key, value = stripped.split("=", 1)
             key = key.strip()
             value = value.strip()
             if key and value:
                 config[key] = value
             else:
-                print(f"Warning: Ignoring invalid line in config: {line.strip()}", file=sys.stderr)
+                print(
+                    f"Warning: Ignoring invalid line in config: {line.strip()}",
+                    file=sys.stderr,
+                )
         else:
-            print(f"Warning: Ignoring invalid line in config: {line.strip()}", file=sys.stderr)
+            print(
+                f"Warning: Ignoring invalid line in config: {line.strip()}",
+                file=sys.stderr,
+            )
             continue  # Skip lines without the assignment operator
 
     return config
+
 
 def validate_input(value: str) -> bool:
     """
     Validate the task or model input to prevent invalid entries.
     """
-    if (
-        ASSIGNMENT_OPERATOR in value
-        or "\n" in value
-        or value.startswith(COMMENT_MARKERS)
-    ):
+    if "=" in value or "\n" in value or value.startswith(COMMENT_MARKERS):
         return False
     return True
+
 
 def set_model(task: str, model: str) -> None:
     """
@@ -213,13 +217,13 @@ def set_model(task: str, model: str) -> None:
             continue
 
         # Check if the line contains the assignment operator
-        if ASSIGNMENT_OPERATOR in stripped:
-            key, _ = stripped.split(ASSIGNMENT_OPERATOR, 1)
+        if "=" in stripped:
+            key, _ = stripped.split("=", 1)
             key = key.strip()
 
             if key == task:
                 # Update the line with the new model
-                new_line = f"{task} {ASSIGNMENT_OPERATOR} {model}\n"
+                new_line = f"{task} = {model}\n"
                 new_lines.append(new_line)
                 updated = True
             else:
@@ -231,7 +235,7 @@ def set_model(task: str, model: str) -> None:
         # Add the new task at the end
         if new_lines and not new_lines[-1].endswith("\n"):
             new_lines.append("\n")
-        new_line = f"{task} {ASSIGNMENT_OPERATOR} {model}\n"
+        new_line = f"{task} = {model}\n"
         new_lines.append(new_line)
 
     # Ensure the directory exists
@@ -248,6 +252,7 @@ def set_model(task: str, model: str) -> None:
         print(f"Updated {task} = {model}")
     else:
         print(f"Set {task} = {model}")
+
 
 def get_model(task: str) -> None:
     """
@@ -272,6 +277,7 @@ def get_model(task: str) -> None:
         print(f"{task} is not set.")
         sys.exit(1)
 
+
 def show_config() -> None:
     """
     Display all task-to-model configurations, with user configurations overriding system configurations.
@@ -294,6 +300,7 @@ def show_config() -> None:
     else:
         print("No configurations found.")
 
+
 def main() -> None:
     args = parse_arguments()
 
@@ -304,9 +311,9 @@ def main() -> None:
     elif args.subcommand == "show":
         show_config()
     else:
-        # This should not happen due to earlier checks, but added for safety
         print("Error: No command provided.", file=sys.stderr)
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
