@@ -11,15 +11,10 @@ import argparse
 import os
 import sys
 import pwd
-import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 VERSION = "1.1.0"
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
 
 # Configuration file paths
 def get_user_config_file() -> Path:
@@ -32,12 +27,11 @@ def get_user_config_file() -> Path:
             user_info = pwd.getpwnam(sudo_user)
             home_dir = user_info.pw_dir
         except KeyError:
-            logging.error(f"Cannot find home directory for sudo user '{sudo_user}'.")
+            print(f"Error: Cannot find home directory for sudo user '{sudo_user}'.", file=sys.stderr)
             sys.exit(1)
     else:
         home_dir = os.environ.get("HOME", str(Path.home()))
     return Path(home_dir) / ".config" / "llm-manager" / "llm.conf"
-
 
 USER_CONFIG_FILE = get_user_config_file()
 SYSTEM_CONFIG_FILE = Path("/etc/llm.conf")
@@ -47,7 +41,6 @@ COMMENT_MARKERS = ("#", "//")
 
 # Define the assignment operator
 ASSIGNMENT_OPERATOR = "="
-
 
 def parse_arguments() -> argparse.Namespace:
     """
@@ -115,7 +108,6 @@ def parse_arguments() -> argparse.Namespace:
 
     return args
 
-
 def read_config_file(config_file: Path) -> List[str]:
     """
     Read the given configuration file and return a list of its lines.
@@ -126,14 +118,13 @@ def read_config_file(config_file: Path) -> List[str]:
             with config_file.open("r", encoding="utf-8") as f:
                 return f.readlines()
         except PermissionError:
-            logging.warning(f"Permission denied while reading {config_file}.")
+            print(f"Warning: Permission denied while reading {config_file}.", file=sys.stderr)
             return []
         except Exception as e:
-            logging.warning(f"Error reading {config_file}: {e}")
+            print(f"Warning: Error reading {config_file}: {e}", file=sys.stderr)
             return []
     else:
         return []
-
 
 def write_config_file(config_file: Path, lines: List[str]) -> None:
     """
@@ -149,12 +140,11 @@ def write_config_file(config_file: Path, lines: List[str]) -> None:
         # Set file permissions to read/write for the user only
         os.chmod(config_file, 0o600)
     except PermissionError:
-        logging.error(f"Permission denied while writing to {config_file}.")
+        print(f"Error: Permission denied while writing to {config_file}.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        logging.error(f"Error writing to {config_file}: {e}")
+        print(f"Error: Error writing to {config_file}: {e}", file=sys.stderr)
         sys.exit(1)
-
 
 def parse_config(lines: List[str]) -> Dict[str, str]:
     """
@@ -180,13 +170,12 @@ def parse_config(lines: List[str]) -> Dict[str, str]:
             if key and value:
                 config[key] = value
             else:
-                logging.warning(f"Ignoring invalid line in config: {line.strip()}")
+                print(f"Warning: Ignoring invalid line in config: {line.strip()}", file=sys.stderr)
         else:
-            logging.warning(f"Ignoring invalid line in config: {line.strip()}")
+            print(f"Warning: Ignoring invalid line in config: {line.strip()}", file=sys.stderr)
             continue  # Skip lines without the assignment operator
 
     return config
-
 
 def validate_input(value: str) -> bool:
     """
@@ -200,14 +189,13 @@ def validate_input(value: str) -> bool:
         return False
     return True
 
-
 def set_model(task: str, model: str) -> None:
     """
     Set or update the model for the given task.
     Writes only to the user configuration file.
     """
     if not validate_input(task) or not validate_input(model):
-        logging.error("Invalid characters in task or model name.")
+        print("Error: Invalid characters in task or model name.", file=sys.stderr)
         sys.exit(1)
 
     # Read user config only
@@ -250,17 +238,16 @@ def set_model(task: str, model: str) -> None:
     try:
         USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     except Exception as e:
-        logging.error(f"Error creating configuration directory: {e}")
+        print(f"Error: Error creating configuration directory: {e}", file=sys.stderr)
         sys.exit(1)
 
     # Write back to user config file
     write_config_file(USER_CONFIG_FILE, new_lines)
 
     if updated:
-        logging.info(f"Updated {task} = {model}")
+        print(f"Updated {task} = {model}")
     else:
-        logging.info(f"Set {task} = {model}")
-
+        print(f"Set {task} = {model}")
 
 def get_model(task: str) -> None:
     """
@@ -285,7 +272,6 @@ def get_model(task: str) -> None:
         print(f"{task} is not set.")
         sys.exit(1)
 
-
 def show_config() -> None:
     """
     Display all task-to-model configurations, with user configurations overriding system configurations.
@@ -308,7 +294,6 @@ def show_config() -> None:
     else:
         print("No configurations found.")
 
-
 def main() -> None:
     args = parse_arguments()
 
@@ -320,9 +305,8 @@ def main() -> None:
         show_config()
     else:
         # This should not happen due to earlier checks, but added for safety
-        logging.error("No command provided.")
+        print("Error: No command provided.", file=sys.stderr)
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
