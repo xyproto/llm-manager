@@ -4,8 +4,6 @@
 # lm-manager
 # Utility for managing LLM model configurations in /etc/llm.conf.
 #
-# Version: 1.0.0
-#
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
@@ -15,7 +13,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 CONFIG_FILE = Path("/etc/llm.conf")
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 # Define comment markers
 SINGLE_LINE_COMMENTS = ["#", "//", "--"]
