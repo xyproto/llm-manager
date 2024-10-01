@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 # lm-manager
-# Utility for managing LLM model configurations in /etc/llm.conf.
+# Utility for managing LLM model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf.
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
@@ -10,9 +10,11 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import Dict, List, Optional, Tuple
 
-CONFIG_FILE = Path("/etc/llm.conf")
+# Configuration file paths
+USER_CONFIG_FILE = Path.home() / ".config" / "llm-manager" / "llm.conf"
+SYSTEM_CONFIG_FILE = Path("/etc/llm.conf")
 VERSION = "1.0.2"
 
 # Define comment markers
@@ -32,7 +34,9 @@ def parse_arguments() -> argparse.Namespace:
     treat it as 'get <task>'.
     """
     parser = argparse.ArgumentParser(
-        description="Manage LLM model configurations by modifying /etc/llm.conf.",
+        description=(
+            "Manage LLM model configurations in ~/.config/llm-manager/llm.conf and /etc/llm.conf."
+        ),
         formatter_class=argparse.RawTextHelpFormatter,
         usage=(
             "lm-manager <command> [<args>]\n\n"
@@ -90,35 +94,40 @@ def parse_arguments() -> argparse.Namespace:
     return args
 
 
-def read_config() -> List[str]:
+def read_config_file(config_file: Path) -> List[str]:
     """
-    Read the configuration file and return a list of its lines.
+    Read the given configuration file and return a list of its lines.
     Preserves comments and blank lines.
     """
-    if CONFIG_FILE.is_file():
+    if config_file.is_file():
         try:
-            with CONFIG_FILE.open("r", encoding="utf-8") as f:
+            with config_file.open("r", encoding="utf-8") as f:
                 return f.readlines()
         except PermissionError:
-            sys.exit(f"Error: Permission denied while reading {CONFIG_FILE}.")
+            print(f"Warning: Permission denied while reading {config_file}.")
+            return []
         except Exception as e:
-            sys.exit(f"Error reading {CONFIG_FILE}: {e}")
+            print(f"Warning: Error reading {config_file}: {e}")
+            return []
     else:
         return []
 
 
-def write_config(lines: List[str]) -> None:
+def write_config_file(config_file: Path, lines: List[str]) -> None:
     """
-    Write the list of lines back to the configuration file.
+    Write the list of lines back to the given configuration file.
     Overwrites the existing file.
     """
     try:
-        with CONFIG_FILE.open("w", encoding="utf-8") as f:
-            f.writelines(lines)
+        with config_file.open("w", encoding="utf-8") as f:
+            for line in lines:
+                if not line.endswith('\n'):
+                    line += '\n'
+                f.write(line)
     except PermissionError:
-        sys.exit(f"Error: Permission denied while writing to {CONFIG_FILE}.")
+        sys.exit(f"Error: Permission denied while writing to {config_file}.")
     except Exception as e:
-        sys.exit(f"Error writing to {CONFIG_FILE}: {e}")
+        sys.exit(f"Error writing to {config_file}: {e}")
 
 
 def find_assignment_operator(line: str) -> Tuple[str, str]:
@@ -135,14 +144,11 @@ def find_assignment_operator(line: str) -> Tuple[str, str]:
     return "", ""
 
 
-def set_model(task: str, model: str) -> None:
+def parse_config(lines: List[str]) -> Dict[str, str]:
     """
-    Set or update the model for the given task.
+    Parse the configuration lines into a dictionary of task to model mappings.
     """
-    lines = read_config()
-    updated = False
-    new_lines = []
-
+    config = {}
     in_multiline_comment = False
 
     for line in lines:
@@ -150,6 +156,58 @@ def set_model(task: str, model: str) -> None:
 
         # Handle multi-line comments
         if in_multiline_comment:
+            if MULTI_LINE_COMMENT_END in stripped:
+                in_multiline_comment = False
+            continue
+
+        if any(stripped.startswith(marker) for marker in SINGLE_LINE_COMMENTS):
+            # Check for start of multi-line comment
+            if stripped.startswith(MULTI_LINE_COMMENT_START):
+                in_multiline_comment = True
+            continue
+
+        if not stripped:
+            continue
+
+        key_with_op, value = find_assignment_operator(line)
+        if not key_with_op:
+            continue
+
+        # Extract the key without the operator
+        key = ""
+        for op in ASSIGNMENT_OPERATORS:
+            if key_with_op.endswith(op):
+                key = key_with_op[: -len(op)].strip()
+                break
+        else:
+            continue
+
+        config[key] = value.rstrip()
+
+    return config
+
+
+def set_model(task: str, model: str) -> None:
+    """
+    Set or update the model for the given task.
+    Writes only to the user configuration file.
+    """
+    # Read user config only
+    lines = read_config_file(USER_CONFIG_FILE)
+
+    updated = False
+    new_lines = []
+
+    in_multiline_comment = False
+
+    for line in lines:
+        original_line = line
+        stripped = line.strip()
+
+        # Handle multi-line comments
+        if in_multiline_comment:
+            if not line.endswith('\n'):
+                line += '\n'
             new_lines.append(line)
             if MULTI_LINE_COMMENT_END in stripped:
                 in_multiline_comment = False
@@ -159,47 +217,71 @@ def set_model(task: str, model: str) -> None:
             # Check for start of multi-line comment
             if stripped.startswith(MULTI_LINE_COMMENT_START):
                 in_multiline_comment = True
+            if not line.endswith('\n'):
+                line += '\n'
             new_lines.append(line)
             continue
 
         if not stripped:
+            if not line.endswith('\n'):
+                line += '\n'
             new_lines.append(line)
             continue
 
         # Get the key and operator from the line
         key_with_op, _ = find_assignment_operator(line)
         if not key_with_op:
+            if not line.endswith('\n'):
+                line += '\n'
             new_lines.append(line)
             continue
 
-        # If the task matches the key, update it
-        if task in key_with_op:
+        # Extract the key without the operator
+        key = ""
+        for op in ASSIGNMENT_OPERATORS:
+            if key_with_op.endswith(op):
+                key = key_with_op[: -len(op)].strip()
+                break
+        else:
+            if not line.endswith('\n'):
+                line += '\n'
+            new_lines.append(line)
+            continue
+
+        if key == task:
             indent = line[: line.find(key_with_op)]
             new_line = f"{indent}{key_with_op} {model}\n"
             new_lines.append(new_line)
             updated = True
         else:
+            if not line.endswith('\n'):
+                line += '\n'
             new_lines.append(line)
 
     if not updated:
-        # Append the new task at the end without adding extra blank lines
-        if lines and not lines[-1].endswith("\n"):
-            new_lines.append("\n")
-        new_lines.append(f"{task} = {model}\n")
+        # Ensure there's a newline before appending if needed
+        if new_lines and not new_lines[-1].endswith('\n'):
+            new_lines.append('\n')
+        new_line = f"{task} = {model}\n"
+        new_lines.append(new_line)
 
-    write_config(new_lines)
+    # Ensure the directory exists
+    USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write back to user config file
+    write_config_file(USER_CONFIG_FILE, new_lines)
+
     if updated:
-        print(f"Updated {task}={model}")
+        print(f"Updated {task} = {model}")
     else:
-        print(f"Set {task}={model}")
+        print(f"Set {task} = {model}")
 
 
-def get_model(task: str) -> None:
+def get_model_from_config(task: str, lines: List[str]) -> Optional[str]:
     """
-    Retrieve and print the model for the given task.
+    Process the lines and try to find the model for the given task.
+    Returns the model value if found, else None.
     """
-    lines = read_config()
-
     in_multiline_comment = False
 
     for line in lines:
@@ -234,29 +316,54 @@ def get_model(task: str) -> None:
             continue
 
         if key == task:
-            print(value.rstrip())
-            return
+            return value.rstrip()
 
-    print(f"{task} is not set.")
-    sys.exit(1)
+    return None
+
+
+def get_model(task: str) -> None:
+    """
+    Retrieve and print the model for the given task.
+    """
+    # Read system config
+    system_lines = read_config_file(SYSTEM_CONFIG_FILE)
+    system_config = parse_config(system_lines)
+
+    # Read user config
+    user_lines = read_config_file(USER_CONFIG_FILE)
+    user_config = parse_config(user_lines)
+
+    # Merge configurations, with user config overriding system config
+    merged_config = system_config.copy()
+    merged_config.update(user_config)
+
+    model = merged_config.get(task)
+    if model:
+        print(model)
+    else:
+        print(f"{task} is not set.")
+        sys.exit(1)
 
 
 def show_config() -> None:
     """
-    Display all task-to-model configurations by printing the contents of /etc/llm.conf.
+    Display all task-to-model configurations, with user configurations overriding system configurations.
     """
-    if CONFIG_FILE.is_file():
-        try:
-            with CONFIG_FILE.open("r", encoding="utf-8") as f:
-                content = f.read()
-                if content.strip():
-                    print(content, end="")
-                else:
-                    print("No configurations found.")
-        except PermissionError:
-            sys.exit(f"Error: Permission denied while reading {CONFIG_FILE}.")
-        except Exception as e:
-            sys.exit(f"Error reading {CONFIG_FILE}: {e}")
+    # Read system config
+    system_lines = read_config_file(SYSTEM_CONFIG_FILE)
+    system_config = parse_config(system_lines)
+
+    # Read user config
+    user_lines = read_config_file(USER_CONFIG_FILE)
+    user_config = parse_config(user_lines)
+
+    # Merge the configs, with user config overriding system config
+    merged_config = system_config.copy()
+    merged_config.update(user_config)
+
+    if merged_config:
+        for task, model in merged_config.items():
+            print(f"{task} = {model}")
     else:
         print("No configurations found.")
 
