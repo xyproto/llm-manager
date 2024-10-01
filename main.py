@@ -8,23 +8,45 @@
 #
 
 import argparse
+import os
 import sys
+import pwd
+import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
+
+VERSION = "1.1.0"
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+
 
 # Configuration file paths
-USER_CONFIG_FILE = Path.home() / ".config" / "llm-manager" / "llm.conf"
+def get_user_config_file() -> Path:
+    """
+    Get the path to the user's configuration file, handling cases where the script is run with sudo.
+    """
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user:
+        try:
+            user_info = pwd.getpwnam(sudo_user)
+            home_dir = user_info.pw_dir
+        except KeyError:
+            logging.error(f"Cannot find home directory for sudo user '{sudo_user}'.")
+            sys.exit(1)
+    else:
+        home_dir = os.environ.get("HOME", str(Path.home()))
+    return Path(home_dir) / ".config" / "llm-manager" / "llm.conf"
+
+
+USER_CONFIG_FILE = get_user_config_file()
 SYSTEM_CONFIG_FILE = Path("/etc/llm.conf")
-VERSION = "1.0.2"
 
 # Define comment markers
-SINGLE_LINE_COMMENTS = ["#", "//", "--"]
-MULTI_LINE_COMMENT_START = "/*"
-MULTI_LINE_COMMENT_END = "*/"
-MULTI_LINE_COMMENTS = [MULTI_LINE_COMMENT_START, MULTI_LINE_COMMENT_END]
+COMMENT_MARKERS = ("#", "//")
 
-# Define possible assignment operators in order of precedence
-ASSIGNMENT_OPERATORS = ["==", "=>", "+=", "-=", "?=", "=", ":=", "::", ":", "is"]
+# Define the assignment operator
+ASSIGNMENT_OPERATOR = "="
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -59,13 +81,13 @@ def parse_arguments() -> argparse.Namespace:
         "set", help="Set or update the model for a specific task"
     )
     parser_set.add_argument(
-        "task", type=str, help="Type of the model (e.g., text-generation)"
+        "task", type=str, help="Type of the task (e.g., text-generation)"
     )
     parser_set.add_argument("model", type=str, help="Model value (e.g., gemma2:2b)")
 
     # Get command
     parser_get = subparsers.add_parser("get", help="Get the model for a specific task")
-    parser_get.add_argument("task", type=str, help="Type of the model to retrieve")
+    parser_get.add_argument("task", type=str, help="Type of the task to retrieve")
 
     # Show command
     subparsers.add_parser("show", help="Show all task-to-model mappings")
@@ -104,10 +126,10 @@ def read_config_file(config_file: Path) -> List[str]:
             with config_file.open("r", encoding="utf-8") as f:
                 return f.readlines()
         except PermissionError:
-            print(f"Warning: Permission denied while reading {config_file}.")
+            logging.warning(f"Permission denied while reading {config_file}.")
             return []
         except Exception as e:
-            print(f"Warning: Error reading {config_file}: {e}")
+            logging.warning(f"Error reading {config_file}: {e}")
             return []
     else:
         return []
@@ -121,27 +143,17 @@ def write_config_file(config_file: Path, lines: List[str]) -> None:
     try:
         with config_file.open("w", encoding="utf-8") as f:
             for line in lines:
-                if not line.endswith('\n'):
-                    line += '\n'
+                if not line.endswith("\n"):
+                    line += "\n"
                 f.write(line)
+        # Set file permissions to read/write for the user only
+        os.chmod(config_file, 0o600)
     except PermissionError:
-        sys.exit(f"Error: Permission denied while writing to {config_file}.")
+        logging.error(f"Permission denied while writing to {config_file}.")
+        sys.exit(1)
     except Exception as e:
-        sys.exit(f"Error writing to {config_file}: {e}")
-
-
-def find_assignment_operator(line: str) -> Tuple[str, str]:
-    """
-    Find the assignment operator in the line and return the key with operator and the value.
-    Returns (key_with_operator, value)
-    """
-    for operator in ASSIGNMENT_OPERATORS:
-        if operator in line:
-            parts = line.split(operator, 1)
-            key = parts[0].rstrip()
-            value = parts[1].rstrip("\n").lstrip()
-            return key + operator, value
-    return "", ""
+        logging.error(f"Error writing to {config_file}: {e}")
+        sys.exit(1)
 
 
 def parse_config(lines: List[str]) -> Dict[str, str]:
@@ -149,42 +161,44 @@ def parse_config(lines: List[str]) -> Dict[str, str]:
     Parse the configuration lines into a dictionary of task to model mappings.
     """
     config = {}
-    in_multiline_comment = False
-
     for line in lines:
         stripped = line.strip()
 
-        # Handle multi-line comments
-        if in_multiline_comment:
-            if MULTI_LINE_COMMENT_END in stripped:
-                in_multiline_comment = False
-            continue
-
-        if any(stripped.startswith(marker) for marker in SINGLE_LINE_COMMENTS):
-            # Check for start of multi-line comment
-            if stripped.startswith(MULTI_LINE_COMMENT_START):
-                in_multiline_comment = True
-            continue
-
+        # Skip empty lines
         if not stripped:
             continue
 
-        key_with_op, value = find_assignment_operator(line)
-        if not key_with_op:
+        # Skip comments
+        if stripped.startswith(COMMENT_MARKERS):
             continue
 
-        # Extract the key without the operator
-        key = ""
-        for op in ASSIGNMENT_OPERATORS:
-            if key_with_op.endswith(op):
-                key = key_with_op[: -len(op)].strip()
-                break
+        # Split line by the assignment operator
+        if ASSIGNMENT_OPERATOR in stripped:
+            key, value = stripped.split(ASSIGNMENT_OPERATOR, 1)
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                config[key] = value
+            else:
+                logging.warning(f"Ignoring invalid line in config: {line.strip()}")
         else:
-            continue
-
-        config[key] = value.rstrip()
+            logging.warning(f"Ignoring invalid line in config: {line.strip()}")
+            continue  # Skip lines without the assignment operator
 
     return config
+
+
+def validate_input(value: str) -> bool:
+    """
+    Validate the task or model input to prevent invalid entries.
+    """
+    if (
+        ASSIGNMENT_OPERATOR in value
+        or "\n" in value
+        or value.startswith(COMMENT_MARKERS)
+    ):
+        return False
+    return True
 
 
 def set_model(task: str, model: str) -> None:
@@ -192,133 +206,60 @@ def set_model(task: str, model: str) -> None:
     Set or update the model for the given task.
     Writes only to the user configuration file.
     """
+    if not validate_input(task) or not validate_input(model):
+        logging.error("Invalid characters in task or model name.")
+        sys.exit(1)
+
     # Read user config only
     lines = read_config_file(USER_CONFIG_FILE)
 
     updated = False
     new_lines = []
 
-    in_multiline_comment = False
-
     for line in lines:
-        original_line = line
         stripped = line.strip()
 
-        # Handle multi-line comments
-        if in_multiline_comment:
-            if not line.endswith('\n'):
-                line += '\n'
-            new_lines.append(line)
-            if MULTI_LINE_COMMENT_END in stripped:
-                in_multiline_comment = False
-            continue
-
-        if any(stripped.startswith(marker) for marker in SINGLE_LINE_COMMENTS):
-            # Check for start of multi-line comment
-            if stripped.startswith(MULTI_LINE_COMMENT_START):
-                in_multiline_comment = True
-            if not line.endswith('\n'):
-                line += '\n'
+        # Skip empty lines and comments
+        if not stripped or stripped.startswith(COMMENT_MARKERS):
             new_lines.append(line)
             continue
 
-        if not stripped:
-            if not line.endswith('\n'):
-                line += '\n'
-            new_lines.append(line)
-            continue
+        # Check if the line contains the assignment operator
+        if ASSIGNMENT_OPERATOR in stripped:
+            key, _ = stripped.split(ASSIGNMENT_OPERATOR, 1)
+            key = key.strip()
 
-        # Get the key and operator from the line
-        key_with_op, _ = find_assignment_operator(line)
-        if not key_with_op:
-            if not line.endswith('\n'):
-                line += '\n'
-            new_lines.append(line)
-            continue
-
-        # Extract the key without the operator
-        key = ""
-        for op in ASSIGNMENT_OPERATORS:
-            if key_with_op.endswith(op):
-                key = key_with_op[: -len(op)].strip()
-                break
+            if key == task:
+                # Update the line with the new model
+                new_line = f"{task} {ASSIGNMENT_OPERATOR} {model}\n"
+                new_lines.append(new_line)
+                updated = True
+            else:
+                new_lines.append(line)
         else:
-            if not line.endswith('\n'):
-                line += '\n'
-            new_lines.append(line)
-            continue
-
-        if key == task:
-            indent = line[: line.find(key_with_op)]
-            new_line = f"{indent}{key_with_op} {model}\n"
-            new_lines.append(new_line)
-            updated = True
-        else:
-            if not line.endswith('\n'):
-                line += '\n'
             new_lines.append(line)
 
     if not updated:
-        # Ensure there's a newline before appending if needed
-        if new_lines and not new_lines[-1].endswith('\n'):
-            new_lines.append('\n')
-        new_line = f"{task} = {model}\n"
+        # Add the new task at the end
+        if new_lines and not new_lines[-1].endswith("\n"):
+            new_lines.append("\n")
+        new_line = f"{task} {ASSIGNMENT_OPERATOR} {model}\n"
         new_lines.append(new_line)
 
     # Ensure the directory exists
-    USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        USER_CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logging.error(f"Error creating configuration directory: {e}")
+        sys.exit(1)
 
     # Write back to user config file
     write_config_file(USER_CONFIG_FILE, new_lines)
 
     if updated:
-        print(f"Updated {task} = {model}")
+        logging.info(f"Updated {task} = {model}")
     else:
-        print(f"Set {task} = {model}")
-
-
-def get_model_from_config(task: str, lines: List[str]) -> Optional[str]:
-    """
-    Process the lines and try to find the model for the given task.
-    Returns the model value if found, else None.
-    """
-    in_multiline_comment = False
-
-    for line in lines:
-        stripped = line.strip()
-
-        # Handle multi-line comments
-        if in_multiline_comment:
-            if MULTI_LINE_COMMENT_END in stripped:
-                in_multiline_comment = False
-            continue
-
-        if any(stripped.startswith(marker) for marker in SINGLE_LINE_COMMENTS):
-            # Check for start of multi-line comment
-            if stripped.startswith(MULTI_LINE_COMMENT_START):
-                in_multiline_comment = True
-            continue
-
-        if not stripped:
-            continue
-
-        key_with_op, value = find_assignment_operator(line)
-        if not key_with_op:
-            continue
-
-        # Extract the key without the operator
-        key = ""
-        for op in ASSIGNMENT_OPERATORS:
-            if key_with_op.endswith(op):
-                key = key_with_op[: -len(op)].strip()
-                break
-        else:
-            continue
-
-        if key == task:
-            return value.rstrip()
-
-    return None
+        logging.info(f"Set {task} = {model}")
 
 
 def get_model(task: str) -> None:
@@ -379,7 +320,7 @@ def main() -> None:
         show_config()
     else:
         # This should not happen due to earlier checks, but added for safety
-        print("Error: No command provided.", file=sys.stderr)
+        logging.error("No command provided.")
         sys.exit(1)
 
 
