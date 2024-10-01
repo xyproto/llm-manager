@@ -48,7 +48,7 @@ llama3.2:3b
 
 ## Default values
 
-The default values for version 1.0.0 of `llm-manager` and `/etc/llm.conf` are:
+The default values for the current version of `llm-manager` and `/etc/llm.conf` are:
 
 | Task            | Model               |
 |-----------------|---------------------|
