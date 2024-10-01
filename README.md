@@ -1,8 +1,8 @@
 # llm-manager
 
-A utility written in Python 3 for managing keys and values in `/etc/llm.conf`.
+A utility written in Python 3 for querying and managing keys and values in `~/.config/llm-manager/llm.conf` and `/etc/llm.conf`.
 
-The idea is that if an editor needs to use the best available LLM model for code completion, it can run this to get the user-configured answer:
+The idea is that if an editor needs to use the best available LLM model for code completion, it can run this to get the user-configured answer, with a fallback on the system defaults:
 
 ```bash
 $ llm-manager code-completion
