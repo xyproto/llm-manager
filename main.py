@@ -51,8 +51,12 @@ def parse_arguments() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="subcommand", title="Commands", metavar="")
 
     # Set command
-    parser_set = subparsers.add_parser("set", help="Set or update the model for a specific task")
-    parser_set.add_argument("task", type=str, help="Type of the model (e.g., text-generation)")
+    parser_set = subparsers.add_parser(
+        "set", help="Set or update the model for a specific task"
+    )
+    parser_set.add_argument(
+        "task", type=str, help="Type of the model (e.g., text-generation)"
+    )
     parser_set.add_argument("model", type=str, help="Model value (e.g., gemma2:2b)")
 
     # Get command
@@ -126,7 +130,7 @@ def find_assignment_operator(line: str) -> Tuple[str, str]:
         if operator in line:
             parts = line.split(operator, 1)
             key = parts[0].rstrip()
-            value = parts[1].rstrip('\n').lstrip()
+            value = parts[1].rstrip("\n").lstrip()
             return key + operator, value
     return "", ""
 
@@ -162,27 +166,16 @@ def set_model(task: str, model: str) -> None:
             new_lines.append(line)
             continue
 
+        # Get the key and operator from the line
         key_with_op, _ = find_assignment_operator(line)
         if not key_with_op:
             new_lines.append(line)
             continue
 
-        # Extract the key without the operator
-        key = ""
-        operator = ""
-        for op in ASSIGNMENT_OPERATORS:
-            if key_with_op.endswith(op):
-                key = key_with_op[:-len(op)].strip()
-                operator = op
-                break
-        else:
-            new_lines.append(line)
-            continue
-
-        if key == task:
-            # Replace the line with the new value, preserving indentation
-            indent = line[:line.find(key_with_op)]
-            new_line = f"{indent}{task}{operator}{model}\n"
+        # If the task matches the key, update it
+        if task in key_with_op:
+            indent = line[: line.find(key_with_op)]
+            new_line = f"{indent}{key_with_op} {model}\n"
             new_lines.append(new_line)
             updated = True
         else:
@@ -192,7 +185,7 @@ def set_model(task: str, model: str) -> None:
         # Append the new task at the end without adding extra blank lines
         if lines and not lines[-1].endswith("\n"):
             new_lines.append("\n")
-        new_lines.append(f"{task}= {model}\n")
+        new_lines.append(f"{task} = {model}\n")
 
     write_config(new_lines)
     if updated:
@@ -235,7 +228,7 @@ def get_model(task: str) -> None:
         key = ""
         for op in ASSIGNMENT_OPERATORS:
             if key_with_op.endswith(op):
-                key = key_with_op[:-len(op)].strip()
+                key = key_with_op[: -len(op)].strip()
                 break
         else:
             continue
