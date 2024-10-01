@@ -11,7 +11,7 @@ import pwd
 from pathlib import Path
 from typing import Dict, List
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 
 def get_user_config_file() -> Path:
