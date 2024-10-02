@@ -58,10 +58,11 @@ The default values for the current version of `llm-manager` and `/etc/llm.conf` 
 | text-generation | gemma2:2b           |
 | tool-use        | llama3.2:3b         |
 | translation     | mixtral:8x7b        |
+| vision          | llava:7b            |
 
-The default configuration will change over time!
+The default configuration may change over time as better models become available.
 
-Relatively small models are chosen, so that more people can use them, even without a GPU.
+For now, relatively small models are chosen, so that more people can use them, even without a GPU.
 
 Here is the default configuration file, `llm.conf`:
 
@@ -83,6 +84,9 @@ tool-use=llama3.2:3b
 
 # For translating text (not single words, though)
 translation=mixtral:8x7b
+
+# Vision and image detection
+vision=llava:7b
 ```
 
 ## General info
