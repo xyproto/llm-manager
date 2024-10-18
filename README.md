@@ -53,12 +53,13 @@ The default values for the current version of `llm-manager` and `/etc/llm.conf` 
 | Task            | Model               |
 |-----------------|---------------------|
 | chat            | llama3.2:3b         |
+| code            | deepseek-coder:1.3b |
 | code-completion | deepseek-coder:1.3b |
 | test            | tinyllama:1b        |
 | text-generation | gemma2:2b           |
 | tool-use        | llama3.2:3b         |
 | translation     | mixtral:8x7b        |
-| vision          | llava:7b            |
+| vision          | llava:7b            |
 
 The default configuration may change over time as better models become available.
 
@@ -69,6 +70,9 @@ Here is the default configuration file, `llm.conf`:
 ```configuration
 # For chatting
 chat=llama3.2:3b
+
+# For analyzing or generating code
+code=deepseek-coder-v2:latest
 
 # For code completion / tab autocompletion
 code-completion=deepseek-coder:1.3b
@@ -91,6 +95,6 @@ vision=llava:7b
 
 ## General info
 
-* Version: 1.2.0
+* Version: 1.2.1
 * License: BSD-3
 * Author: Alexander F. Rødseth &lt;xyproto@archlinux.org&gt;
