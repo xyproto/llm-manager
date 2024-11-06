@@ -93,6 +93,10 @@ translation=mixtral:8x7b
 vision=llava:7b
 ```
 
+## Related projects
+
+* The [usermodel](https://github.com/xyproto/usermodel) package, for Go.
+
 ## General info
 
 * Version: 1.2.1
